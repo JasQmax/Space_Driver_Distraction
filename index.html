@@ -40,6 +40,12 @@
   #btnIn{background:#1fa37a} #btnOut{background:#e8602c}
   #btnIn.on,#btnOut.on{filter:brightness(1.5);outline:4px solid #fff}
   #btnRace{border:0;border-radius:16px;padding:clamp(12px,3vmin,28px);font-size:clamp(20px,5.5vmin,44px);font-weight:800;color:#111;background:linear-gradient(90deg,#ffd23f,#7dff9a)}
+  .rw2{display:flex;gap:8px}
+  .rw2 button{flex:1}
+  #btnBoost{border:0;border-radius:16px;padding:clamp(12px,3vmin,28px);font-size:clamp(20px,5.5vmin,44px);font-weight:800;color:#fff;background:#3a4a8a;opacity:.5}
+  #btnBoost.ready{opacity:1;background:linear-gradient(90deg,#1fa37a,#7dff9a);color:#111;animation:bp .8s infinite alternate}
+  #btnBoost.active{opacity:1;background:#ffd23f;color:#111;animation:none}
+  @keyframes bp{from{box-shadow:0 0 0 rgba(125,255,154,0)}to{box-shadow:0 0 22px rgba(125,255,154,.9)}}
   #remote .rw{display:flex;gap:8px}
   #remote .rw button{flex:1;padding:14px 6px;min-height:48px;border:0;border-radius:12px;background:#2e6bff;color:#fff;font-size:16px}
   #rstat{text-align:center;color:#8fd;font-size:14px}
@@ -61,7 +67,6 @@
   /* ---- phone in LANDSCAPE (short screens) ---- */
   @media (orientation:landscape) and (max-height:520px){
     #panel{max-width:200px;font-size:12px;padding:8px 10px}
-    /* hangar: preview on the left, options on the right */
     #hangar h1{font-size:18px;margin:2px 0;grid-area:h}
     #hangar h1 small{display:none}
     #hangar .card{display:grid;grid-template-columns:minmax(200px,36%) 1fr;grid-template-areas:"h h" "pv opts" "pv launch";gap:4px 14px;align-items:start;width:min(98vw,1100px);padding:4px 4px 20px}
@@ -73,14 +78,14 @@
     .co i{font-size:20px}
     .row .lbl{width:100%;text-align:center}
     .sw{width:38px;height:38px}
-    /* remote: two big thumb buttons side by side */
     #remote.show{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(0,1fr) auto auto;gap:8px}
     #rstat{grid-column:1;text-align:left}
     #rinfo{grid-column:2;text-align:right;font-size:16px}
     #btnIn{grid-column:1;grid-row:2}
     #btnOut{grid-column:2;grid-row:2}
     #remote .big{min-height:0;font-size:clamp(20px,9vh,40px)}
-    #btnRace{grid-column:1/-1;padding:8px;font-size:20px}
+    .rw2{grid-column:1/-1}
+    #btnRace,#btnBoost{padding:8px;font-size:20px}
     #remote .rw{grid-column:1/-1}
     #remote .rw button{padding:8px 4px;min-height:40px;font-size:14px}
   }
@@ -108,7 +113,7 @@
   </div>
   <div id="status">Connecting to MQTT…</div>
   <div id="qr"></div>
-  <div style="font-size:12px;opacity:.7;margin-top:4px">Keyboard: hold I = inhale, hold E = exhale, Space = next / pause, Enter = start race, F = finish, R = reset, H = show / hide panel</div>
+  <div style="font-size:12px;opacity:.7;margin-top:4px">Keyboard: hold I = inhale, hold E = exhale, Space = next / pause, Enter = start race, B = booster, F = finish, R = reset, H = show / hide panel</div>
   <button id="bHide">Hide panel</button>
 </div>
 <button id="panelToggle" title="Show control panel (H)">⚙ Show panel</button>
@@ -118,7 +123,10 @@
   <div id="rinfo">—</div>
   <button id="btnIn" class="big">INHALE<br>(hold)</button>
   <button id="btnOut" class="big">EXHALE<br>(hold)</button>
-  <button id="btnRace" data-cmd="race">🏁 START RACE</button>
+  <div class="rw2">
+    <button id="btnBoost" data-cmd="boost">⚡ BOOST</button>
+    <button id="btnRace" data-cmd="race">🏁 START RACE</button>
+  </div>
   <div class="rw">
     <button data-cmd="start">Next (tutorial)</button>
     <button data-cmd="pause">Pause</button>
@@ -139,6 +147,7 @@ const CONFIG = {
   inhaleFillSec: 1.0,      // seconds of holding INHALE to fill the gauge
   exhaleDrainSec: 1.4,     // seconds of holding EXHALE to drain it
   practiceTarget: 3,
+  boostReadyLead: .07,     // booster badge turns "READY" this far (about 2 breaths) before it fires
   leadCurve: [[0,.07],[.12,.15],[.28,.17],[.42,.05],[.5,-.03],[.6,-.06],[.68,.02],[.78,.07],[.86,-.04],[.94,-.02],[1,-.05]],
   events: [
     {at:.02,t:'The rival blasts off towards the Sun!',fx:'shake'},
@@ -429,6 +438,7 @@ function initRemote(room){
   client.on('reconnect',()=>stat.textContent='Reconnecting…');
   client.on('offline',()=>stat.textContent='Offline');
   client.on('error',e=>stat.textContent='Error: '+e.message);
+  let wasReady=false;
   client.on('message',(t,p)=>{
     try{ const s=JSON.parse(p.toString());
       const ph=s.phase;
@@ -436,6 +446,12 @@ function initRemote(room){
         : ph==='tutorial'?`Tutorial – practice breaths: ${s.practice}`
         : ph==='countdown'?'Ready… Get set…'
         : `Breath ${s.breaths} / ${s.total}`;
+      const bb=document.getElementById('btnBoost');
+      bb.classList.toggle('ready',s.boost==='ready');
+      bb.classList.toggle('active',s.boost==='active');
+      bb.textContent=s.boost==='ready'?'⚡ BOOST READY!':s.boost==='active'?'⚡ BOOSTING!':'⚡ BOOST';
+      if(s.boost==='ready'&&!wasReady&&navigator.vibrate) navigator.vibrate([60,40,60]);
+      wasReady=s.boost==='ready';
     }catch(e){}
   });
   const hold=(el,mode)=>{
@@ -547,7 +563,7 @@ function initGame(){
   let S;
   function reset(){
     S={phase:'hangar',paused:false,mode:'none',charge:0,exhaleArmed:true,breaths:0,practice:0,
-       pTarget:0,p:0,rival:0,thrust:0,speed:80,boost:0,sputter:0,shake:0,rings:[],evDone:{},
+       pTarget:0,p:0,rival:0,thrust:0,speed:80,boost:0,boostMax:0,badge:null,sputter:0,shake:0,rings:[],evDone:{},
        rv:makeRival(),lastShock:0,
        particles:[],t:0,finishT:0,cdT:0,cdStage:-1,goT:0,banner:'',bannerT:0,bannerD:1};
   }
@@ -568,6 +584,23 @@ function initGame(){
 
   /* ---- controls ---- */
   function say(t,d=2.5){S.banner=t;S.bannerT=d;S.bannerD=d;}
+
+  /* ---- boosters (cosmetic; the race result is set by leadCurve) ---- */
+  const BOOST_IDS=CONFIG.events.map((e,i)=>e.fx==='boost'?i:-1).filter(i=>i>=0);
+  function fireEvent(i){
+    const e=CONFIG.events[i]; S.evDone[i]=1;
+    say(e.fx==='boost'&&e.at<.5 ? SPECIALS[cfg.special].name.toUpperCase()+' ENGAGED!' : e.t,2.6);
+    if(e.fx==='boost'){ S.boost=2.6; S.boostMax=2.6; }
+    if(e.fx==='sputter') S.sputter=3.2;
+    if(e.fx==='shake') S.shake=.6;
+  }
+  function tryBoost(){
+    if(S.phase!=='racing'||S.paused) return;
+    const i=BOOST_IDS.find(k=>!S.evDone[k]);
+    if(i===undefined) return;
+    if(S.p>=CONFIG.events[i].at-CONFIG.boostReadyLead) fireEvent(i);
+  }
+
   function setMode(m){
     if(S.mode===m) return;
     S.mode=m;
@@ -585,6 +618,7 @@ function initGame(){
     }
   }
   function startCountdown(){
+    S.boostMax=0;
     S.rv=makeRival();
     S.breaths=0;S.p=0;S.pTarget=0;S.rival=0;S.charge=0;S.thrust=0;S.boost=0;S.sputter=0;
     S.particles=[];S.rings=[];S.evDone={};S.cdT=0;S.cdStage=-1;S.exhaleArmed=true;S.phase='countdown';S.bannerT=0;
@@ -592,6 +626,7 @@ function initGame(){
   function cmd(c){
     if(c==='start'){ if(S.phase==='hangar'){S.phase='tutorial';S.charge=0;S.thrust=0;} }
     if(c==='race'){ if(S.phase==='tutorial'||S.phase==='hangar') startCountdown(); }
+    if(c==='boost') tryBoost();
     if(c==='pause') S.paused=!S.paused;
     if(c==='finish'&&S.phase==='racing'){ S.breaths=CONFIG.cyclesToFinish; S.pTarget=1; }
     if(c==='reset') reset();
@@ -604,9 +639,14 @@ function initGame(){
     if(keys[k]) setMode(keys[k]);
     else if(k===' '){e.preventDefault(); S.phase==='hangar'?cmd('start'):cmd('pause');}
     else if(k==='enter') cmd('race');
-    else if(k==='f') cmd('finish'); else if(k==='r') cmd('reset'); else if(k==='h') togglePanel();
+    else if(k==='f') cmd('finish'); else if(k==='r') cmd('reset'); else if(k==='h') togglePanel(); else if(k==='b') tryBoost();
   });
   addEventListener('keyup',e=>{ if(keys[e.key.toLowerCase()]) setMode('none'); });
+  cv.addEventListener('pointerdown',e=>{
+    const b=S.badge; if(!b||!b.ready) return;
+    const rc=cv.getBoundingClientRect();
+    if(Math.hypot(e.clientX-rc.left-b.x,e.clientY-rc.top-b.y)<b.r*1.5) tryBoost();
+  });
   ['bStart','bRace','bPause','bFinish','bReset'].forEach(id=>document.getElementById(id).onclick=()=>cmd(id.slice(1).toLowerCase()));
   document.getElementById('bHide').onclick=togglePanel;
   toggleBtn.onclick=togglePanel;
@@ -633,10 +673,13 @@ function initGame(){
       }catch(e){}
     });
   }catch(e){status.textContent='MQTT unavailable – use keyboard';}
-  let pubT=0;
+  let pubT=0, lastBs='idle';
   function publishState(dt){
-    pubT+=dt; if(pubT<0.4||!client||!client.connected) return; pubT=0;
-    client.publish(base+'state',JSON.stringify({phase:S.phase,breaths:S.breaths,practice:S.practice,total:CONFIG.cyclesToFinish}));
+    pubT+=dt;
+    const bs=(S.badge&&S.badge.ready)?'ready':(S.boost>0&&S.boostMax>0?'active':'idle');
+    if((pubT<0.4&&bs===lastBs)||!client||!client.connected) return;
+    pubT=0; lastBs=bs;
+    client.publish(base+'state',JSON.stringify({phase:S.phase,breaths:S.breaths,practice:S.practice,total:CONFIG.cyclesToFinish,boost:bs}));
   }
 
   /* ---- particles ---- */
@@ -757,7 +800,6 @@ function initGame(){
     ctx.beginPath(); ctx.moveTo(tx,gy-4); ctx.lineTo(tx,gy+gh+4); ctx.stroke();
     ctx.fillStyle='#fff'; ctx.textAlign='center';
     if(short){
-      // label sits inside the bar to save vertical space
       ctx.font=`700 ${gh*.58}px system-ui`;
       ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,.65)';
       ctx.strokeText(label,W/2,gy+gh*.72); ctx.fillText(label,W/2,gy+gh*.72);
@@ -766,6 +808,53 @@ function initGame(){
       ctx.shadowColor='#000'; ctx.shadowBlur=PHONE?0:6; ctx.fillText(label,W/2,gy-16); ctx.shadowBlur=0;
     }
     ctx.restore();
+  }
+  function drawBoosterBadge(){
+    S.badge=null;
+    if(S.phase!=='racing') return;
+    const sp=SPECIALS[cfg.special], short=H<520, portrait=W<H;
+    const r=short?24:portrait?30:36;
+    const x=W-r-18, y=portrait?H*.8:H-r-(short?14:34);
+    const idx=BOOST_IDS.find(k=>!S.evDone[k]);
+    const active=S.boost>0&&S.boostMax>0;
+    if(idx===undefined&&!active) return;
+
+    let state='charging', frac=0, col='#9fb3ff', label='BOOSTER';
+    if(active){ state='active'; frac=S.boost/S.boostMax; col='#ffd23f'; label='BOOSTING!'; }
+    else{
+      const e=CONFIG.events[idx];
+      const prev=BOOST_IDS.filter(k=>k<idx).map(k=>CONFIG.events[k].at).pop()||0;
+      frac=Math.max(0,Math.min(1,(S.p-prev)/(e.at-prev)));
+      if(S.p>=e.at-CONFIG.boostReadyLead){ state='ready'; col='#7dff9a'; label='READY!'; }
+    }
+    const pulse=state==='ready'?(.5+.5*Math.sin(S.t*8)):0;
+
+    ctx.save();
+    if(state==='ready'){
+      for(let k=0;k<2;k++){
+        const ph=((S.t*1.2+k/2)%1);
+        ctx.strokeStyle=`rgba(125,255,154,${.6*(1-ph)})`; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(x,y,r*(1+ph*.6),0,7); ctx.stroke();
+      }
+    }
+    ctx.fillStyle=state==='ready'?`rgba(20,70,40,${.75+.2*pulse})`:'rgba(5,10,30,.7)';
+    ctx.shadowColor=col; ctx.shadowBlur=(PHONE||state==='charging')?0:18+10*pulse;
+    ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); ctx.shadowBlur=0;
+
+    ctx.lineWidth=5; ctx.lineCap='round';
+    ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.beginPath(); ctx.arc(x,y,r-3,0,7); ctx.stroke();
+    ctx.strokeStyle=col; ctx.beginPath();
+    ctx.arc(x,y,r-3,-Math.PI/2,-Math.PI/2+Math.PI*2*(state==='ready'?1:frac)); ctx.stroke();
+
+    ctx.globalAlpha=state==='charging'?.55:1;
+    ctx.font=`${r*.95}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(sp.icon,x,y+2); ctx.globalAlpha=1; ctx.textBaseline='alphabetic';
+
+    ctx.font=`700 ${short?11:13}px system-ui`; ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,.7)'; ctx.fillStyle=col;
+    ctx.strokeText(label,x,y-r-8); ctx.fillText(label,x,y-r-8);
+    ctx.restore();
+
+    S.badge={x,y,r,ready:state==='ready'};
   }
   function specialFx(px,py,cf){
     if(S.boost<=0) return;
@@ -838,15 +927,7 @@ function initGame(){
       if(S.pTarget-S.p<0.002) S.p=S.pTarget;
       S.speed=80+((S.p-prev)/Math.max(dt,1e-3))*2800+S.thrust*400+(S.boost>0?500:0);
       S.rival+=(rivalTarget(S.p,S.t)-S.rival)*Math.min(1,dt*3.5);
-      CONFIG.events.forEach((e,i)=>{
-        if(!S.evDone[i] && S.p>=e.at){
-          S.evDone[i]=1;
-          say(e.fx==='boost'&&e.at<.5 ? SPECIALS[cfg.special].name.toUpperCase()+' ENGAGED!' : e.t,2.6);
-          if(e.fx==='boost') S.boost=2.6;
-          if(e.fx==='sputter') S.sputter=3.2;
-          if(e.fx==='shake') S.shake=.6;
-        }
-      });
+      CONFIG.events.forEach((e,i)=>{ if(!S.evDone[i] && S.p>=e.at) fireEvent(i); });
       if(S.p>=1){S.phase='finishing';S.finishT=0;S.thrust=1;S.shake=.8;say('YOU REACHED THE SUN FIRST!',3.5);confetti(W*.8);}
     } else if(S.phase==='finishing'){
       S.finishT+=dt;
@@ -887,7 +968,6 @@ function initGame(){
     drawSun(sunP,S.t);
     for(const p of planets) if(p.img) ctx.drawImage(p.img,p.x*W-p.img.width/2,p.y*H-p.img.height/2);
 
-    // lane positions: compact layout on short (landscape phone) screens
     const x0=W*.14, span=W*.66, yR=short?H*.22:H*.30;
     let yP=raceView?(short?H*.62:H*.68):(short?H*.60:H*.56), px, rx=x0+span*S.rival, py=yP;
     if(raceView){
@@ -949,8 +1029,8 @@ function initGame(){
       ctx.font=`${short?18:24}px system-ui`; ctx.textAlign='left'; ctx.fillText('☀️',bx+bw+14,by+(short?10:12));
     }
     if(S.phase==='racing'||S.phase==='tutorial') breathGauge();
+    drawBoosterBadge();
 
-    // breath counter position: bottom-left (normal), top-right (landscape phone), top-centre (portrait)
     const cpos=portrait?{x:W/2,y:80,a:'center'}:short?{x:W-16,y:36,a:'right'}:{x:20,y:H-24,a:'left'};
     const cfont=short?'600 18px system-ui':'600 22px system-ui';
 
@@ -986,7 +1066,7 @@ function initGame(){
     }
     if(S.bannerT>0){
       const a=Math.min(1,S.bannerT*2), el=S.bannerD-S.bannerT, pop=1+Math.max(0,.25-el)*2;
-      const by2=short?(yR+yP)/2+8:H*.17;                       // banner sits between the two ships on short screens
+      const by2=short?(yR+yP)/2+8:H*.17;
       const bsz=Math.max(18,Math.min(W*.036,short?H*.085:999));
       text(S.banner,by2,bsz*pop,a,'#ffe36b');
     }
