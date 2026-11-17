@@ -10,8 +10,8 @@
   #panel{position:fixed;top:10px;left:10px;background:rgba(10,15,40,.8);border:1px solid #3a4a8a;border-radius:12px;padding:10px 14px;font-size:14px;max-width:240px;z-index:5}
   #panel button{margin:3px 2px;padding:6px 10px;border-radius:8px;border:0;background:#2e6bff;color:#fff;font-size:14px;cursor:pointer}
   #panel #bRace{background:#1fa37a;font-weight:700}
-  #panelToggle{position:fixed;top:10px;right:10px;z-index:6;width:42px;height:42px;border-radius:50%;border:1px solid #3a4a8a;background:rgba(10,15,40,.8);color:#fff;font-size:20px;cursor:pointer;opacity:.45}
-  #panelToggle:hover{opacity:1}
+  #panelToggle{position:fixed;top:10px;left:10px;z-index:6;display:none;padding:10px 16px;border-radius:12px;border:2px solid #7aa2ff;background:#2e6bff;color:#fff;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 0 14px rgba(46,107,255,.7)}
+  #panelToggle:hover{filter:brightness(1.2)}
   #qr{background:#fff;padding:6px;display:inline-block;border-radius:6px;margin-top:6px}
   #status{margin-top:4px;color:#8fd}
   #hangar{position:fixed;inset:0;z-index:4;background:radial-gradient(ellipse at 50% 30%,#1b2a6b 0%,#050816 70%);display:flex;align-items:flex-start;justify-content:center;overflow:auto}
@@ -66,7 +66,7 @@
   <div style="font-size:12px;opacity:.7;margin-top:4px">Keyboard: hold I = inhale, hold E = exhale, Space = next / pause, Enter = start race, F = finish, R = reset, H = show / hide panel</div>
   <button id="bHide">Hide panel</button>
 </div>
-<button id="panelToggle" title="Show / hide control panel (H)">⚙</button>
+<button id="panelToggle" title="Show control panel (H)">⚙ Show panel</button>
 
 <div id="remote">
   <div id="rstat">Connecting…</div>
@@ -407,7 +407,12 @@ function initGame(){
 
   /* ---- panel show / hide ---- */
   const panelEl=document.getElementById('panel');
-  const togglePanel=()=>{ panelEl.style.display=(panelEl.style.display==='none')?'block':'none'; };
+  const toggleBtn=document.getElementById('panelToggle');
+  const togglePanel=()=>{
+    const hide=panelEl.style.display!=='none';
+    panelEl.style.display=hide?'none':'block';
+    toggleBtn.style.display=hide?'block':'none';
+  };
 
   /* ---- customisation ---- */
   let cfg={body:'#4fd0ff',accent:'#ffffff',flame:'orange',deco:'stripe',name:'',hull:'interceptor',engine:'plasma',special:'overdrive'};
@@ -519,7 +524,7 @@ function initGame(){
   addEventListener('keyup',e=>{ if(keys[e.key.toLowerCase()]) setMode('none'); });
   ['bStart','bRace','bPause','bFinish','bReset'].forEach(id=>document.getElementById(id).onclick=()=>cmd(id.slice(1).toLowerCase()));
   document.getElementById('bHide').onclick=togglePanel;
-  document.getElementById('panelToggle').onclick=togglePanel;
+  toggleBtn.onclick=togglePanel;
 
   /* ---- MQTT ---- */
   const status=document.getElementById('status');
