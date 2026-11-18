@@ -21,14 +21,14 @@
   #hangar{position:fixed;inset:0;z-index:4;background:radial-gradient(ellipse at 50% 30%,#1b2a6b 0%,#050816 70%);display:flex;align-items:flex-start;justify-content:center;overflow:auto}
   #hangar .card{width:min(980px,94vw);text-align:center;padding:10px 10px 40px}
   #hangar h1{margin:6px 0;font-size:clamp(22px,4vw,40px)}
-  #pv{width:min(560px,90vw);height:auto;background:rgba(255,255,255,.04);border-radius:20px}
+  #pv{display:block;margin:0 auto;width:min(560px,90vw,60vh);height:auto;background:#050816;border-radius:20px;position:sticky;top:8px;z-index:3;box-shadow:0 8px 24px rgba(0,0,0,.65)}
   .row{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0;flex-wrap:wrap}
   .row .lbl{width:110px;text-align:right;opacity:.8;font-size:15px}
   .sw{width:44px;height:44px;border-radius:50%;border:3px solid transparent;cursor:pointer;padding:0}
   .opt{padding:10px 16px;border-radius:12px;border:3px solid transparent;background:#1c2a66;color:#fff;font-size:16px;cursor:pointer}
   .sel{border-color:#fff!important;transform:scale(1.08)}
   #nm{padding:10px 14px;border-radius:12px;border:0;font-size:18px;width:200px;text-align:center}
-  #launch{margin-top:14px;padding:16px 46px;font-size:26px;font-weight:700;border:0;border-radius:18px;background:linear-gradient(90deg,#ff7a3d,#ffd23f);color:#111;cursor:pointer}
+  #launch{margin-top:14px;padding:16px 46px;font-size:26px;font-weight:700;border:0;border-radius:18px;background:linear-gradient(90deg,#ff7a3d,#ffd23f);color:#111;cursor:pointer;position:sticky;bottom:12px;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.5)}
   .sec{margin:14px 0 4px;font-size:13px;letter-spacing:.15em;opacity:.7;text-transform:uppercase}
   .cards{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
   .co{width:150px;padding:10px;border-radius:14px;border:3px solid transparent;background:#16225a;color:#fff;cursor:pointer;text-align:center}
@@ -94,6 +94,15 @@
     #btnDistract{padding:8px;font-size:18px}
     #remote .rw{grid-column:1/-1}
     #remote .rw button{padding:8px 4px;min-height:40px;font-size:14px}
+  }
+
+  /* ---- iPad / large landscape: preview stays pinned on the left while options scroll ---- */
+  @media (orientation:landscape) and (min-height:521px){
+    #hangar .card{display:grid;grid-template-columns:minmax(300px,42%) 1fr;grid-template-areas:"h h" "pv opts" "pv launch";gap:6px 20px;align-items:start;width:min(1180px,96vw)}
+    #hangar h1{grid-area:h}
+    #pv{grid-area:pv;width:100%;top:10px}
+    #opts{grid-area:opts}
+    #launch{grid-area:launch;width:100%}
   }
 </style>
 </head>
