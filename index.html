@@ -13,6 +13,7 @@
   #panel{position:fixed;top:10px;left:10px;background:rgba(10,15,40,.8);border:1px solid #3a4a8a;border-radius:12px;padding:10px 14px;font-size:14px;max-width:240px;z-index:5;max-height:calc(100dvh - 20px);overflow:auto}
   #panel button{margin:3px 2px;padding:6px 10px;border-radius:8px;border:0;background:#2e6bff;color:#fff;font-size:14px;cursor:pointer}
   #panel #bRace{background:#1fa37a;font-weight:700}
+  #panel #bDistract{background:#8a3bd6}
   #panelToggle{position:fixed;top:10px;left:10px;z-index:6;display:none;padding:10px 16px;border-radius:12px;border:2px solid #7aa2ff;background:#2e6bff;color:#fff;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 0 14px rgba(46,107,255,.7)}
   #panelToggle:hover{filter:brightness(1.2)}
   #qr{background:#fff;padding:6px;display:inline-block;border-radius:6px;margin-top:6px}
@@ -46,6 +47,9 @@
   #btnBoost.ready{opacity:1;background:linear-gradient(90deg,#1fa37a,#7dff9a);color:#111;animation:bp .8s infinite alternate}
   #btnBoost.active{opacity:1;background:#ffd23f;color:#111;animation:none}
   @keyframes bp{from{box-shadow:0 0 0 rgba(125,255,154,0)}to{box-shadow:0 0 22px rgba(125,255,154,.9)}}
+  .rw4{display:flex}
+  #btnDistract{flex:1;border:0;border-radius:16px;padding:clamp(10px,2.4vmin,22px);font-size:clamp(18px,4.6vmin,36px);font-weight:800;color:#fff;background:linear-gradient(90deg,#7a3bd6,#e8602c)}
+  #btnDistract.on{background:#ffd23f;color:#111}
   #remote .rw{display:flex;gap:8px}
   #remote .rw button{flex:1;padding:14px 6px;min-height:48px;border:0;border-radius:12px;background:#2e6bff;color:#fff;font-size:16px}
   #rstat{text-align:center;color:#8fd;font-size:14px}
@@ -78,14 +82,16 @@
     .co i{font-size:20px}
     .row .lbl{width:100%;text-align:center}
     .sw{width:38px;height:38px}
-    #remote.show{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(0,1fr) auto auto;gap:8px}
+    #remote.show{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(0,1fr) auto auto auto;gap:8px}
     #rstat{grid-column:1;text-align:left}
     #rinfo{grid-column:2;text-align:right;font-size:16px}
     #btnIn{grid-column:1;grid-row:2}
     #btnOut{grid-column:2;grid-row:2}
     #remote .big{min-height:0;font-size:clamp(20px,9vh,40px)}
     .rw2{grid-column:1/-1}
+    .rw4{grid-column:1/-1}
     #btnRace,#btnBoost{padding:8px;font-size:20px}
+    #btnDistract{padding:8px;font-size:18px}
     #remote .rw{grid-column:1/-1}
     #remote .rw button{padding:8px 4px;min-height:40px;font-size:14px}
   }
@@ -110,10 +116,11 @@
     <button id="bPause">Pause</button>
     <button id="bFinish">Finish</button>
     <button id="bReset">Reset</button>
+    <button id="bDistract">☄️ Distract</button>
   </div>
   <div id="status">Connecting to MQTT…</div>
   <div id="qr"></div>
-  <div style="font-size:12px;opacity:.7;margin-top:4px">Keyboard: hold I = inhale, hold E = exhale, Space = next / pause, Enter = start race, B = booster, F = finish, R = reset, H = show / hide panel</div>
+  <div style="font-size:12px;opacity:.7;margin-top:4px">Keyboard: hold I = inhale, hold E = exhale, Space = next / pause, Enter = start race, B = booster, D = asteroid shower, F = finish, R = reset, H = show / hide panel</div>
   <button id="bHide">Hide panel</button>
 </div>
 <button id="panelToggle" title="Show control panel (H)">⚙ Show panel</button>
@@ -126,6 +133,9 @@
   <div class="rw2">
     <button id="btnBoost" data-cmd="boost">⚡ BOOST</button>
     <button id="btnRace" data-cmd="race">🏁 START RACE</button>
+  </div>
+  <div class="rw4">
+    <button id="btnDistract" data-cmd="distract">☄️ DISTRACT</button>
   </div>
   <div class="rw">
     <button data-cmd="start">Next (tutorial)</button>
@@ -148,6 +158,7 @@ const CONFIG = {
   exhaleDrainSec: 1.4,     // seconds of holding EXHALE to drain it
   practiceTarget: 3,
   boostReadyLead: .07,     // booster badge turns "READY" this far (about 2 breaths) before it fires
+  showerSec: 45,           // length of the asteroid-shower distraction (press DISTRACT again to stop early)
   leadCurve: [[0,.07],[.12,.15],[.28,.17],[.42,.05],[.5,-.03],[.6,-.06],[.68,.02],[.78,.07],[.86,-.04],[.94,-.02],[1,-.05]],
   events: [
     {at:.02,t:'The rival blasts off towards the Sun!',fx:'shake'},
@@ -347,7 +358,7 @@ function hexHue(hex){
   let h= mx===r?((g-b)/d)%6 : mx===g?(b-r)/d+2 : (r-g)/d+4; h*=60; return (h+360)%360;
 }
 
-/* ===================== PLANETS & SUN (procedural sprites) ===================== */
+/* ===================== PLANETS, SUN & ASTEROIDS (procedural sprites) ===================== */
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function planetSprite(type,R,seed){
   const rand=mulberry(seed), N=Math.ceil((R+R*.4)*2);
@@ -421,6 +432,30 @@ function sunSprite(){
   c.fillStyle=lg; c.fillRect(0,0,N,N);
   return cv;
 }
+function rockSprite(seed,gold){
+  const N=128, R=N*.36, rand=mulberry(seed);
+  const cv=document.createElement('canvas'); cv.width=cv.height=N;
+  const c=cv.getContext('2d');
+  const pts=[], n=14;
+  for(let i=0;i<n;i++){ const a=i/n*Math.PI*2, r=R*(.78+rand()*.34); pts.push([N/2+Math.cos(a)*r,N/2+Math.sin(a)*r]); }
+  const path=()=>{ c.beginPath(); pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1])); c.closePath(); };
+  const g=c.createRadialGradient(N*.4,N*.38,R*.1,N/2,N/2,R*1.2);
+  if(gold){ g.addColorStop(0,'#fff6b0'); g.addColorStop(.5,'#ffc933'); g.addColorStop(1,'#a8620a'); }
+  else{ g.addColorStop(0,'#b7a999'); g.addColorStop(.55,'#6f655b'); g.addColorStop(1,'#2c2824'); }
+  path(); c.fillStyle=g; c.fill();
+  c.save(); path(); c.clip();
+  for(let i=0;i<7;i++){
+    const x=N/2+(rand()-.5)*R*1.3, y=N/2+(rand()-.5)*R*1.3, r=R*(.08+rand()*.14);
+    c.fillStyle=gold?'rgba(120,70,0,.35)':'rgba(0,0,0,.35)'; c.beginPath(); c.arc(x,y,r,0,7); c.fill();
+    c.fillStyle='rgba(255,255,255,.18)'; c.beginPath(); c.arc(x-r*.25,y-r*.25,r*.7,0,7); c.fill();
+  }
+  const sh=c.createLinearGradient(N*.3,N*.3,N*.8,N*.85);
+  sh.addColorStop(0,'rgba(255,255,255,.15)'); sh.addColorStop(1,'rgba(0,0,0,.5)');
+  c.fillStyle=sh; c.fillRect(0,0,N,N);
+  c.restore();
+  path(); c.strokeStyle='rgba(0,0,0,.5)'; c.lineWidth=1.5; c.stroke();
+  return cv;
+}
 
 /* ===================== REMOTE (phone) ===================== */
 function initRemote(room){
@@ -452,6 +487,9 @@ function initRemote(room){
       bb.textContent=s.boost==='ready'?'⚡ BOOST READY!':s.boost==='active'?'⚡ BOOSTING!':'⚡ BOOST';
       if(s.boost==='ready'&&!wasReady&&navigator.vibrate) navigator.vibrate([60,40,60]);
       wasReady=s.boost==='ready';
+      const bd=document.getElementById('btnDistract'), on=s.shower>0;
+      bd.classList.toggle('on',on);
+      bd.textContent=on?`☄️ SHOWER ${s.shower}s – TAP TO STOP`:'☄️ DISTRACT';
     }catch(e){}
   });
   const hold=(el,mode)=>{
@@ -479,6 +517,7 @@ function initGame(){
   const cv=document.getElementById('c'), ctx=cv.getContext('2d');
   let W,H,DPR=Math.min(window.devicePixelRatio||1,PHONE?1.5:2);
   const SUN=sunSprite();
+  const ROCKS=[1,2,3,4,5].map(s=>rockSprite(s*13,false)), GOLD=rockSprite(77,true);
   const PL_SIZE={venus:.10,mercury:.05,moon:.045}, PL_SEED={earth:3,venus:7,mercury:11,moon:5};
   const planets=[
     {type:'earth', x:.20,y:.86,r:.20,z:.30},
@@ -565,6 +604,7 @@ function initGame(){
     S={phase:'hangar',paused:false,mode:'none',charge:0,exhaleArmed:true,breaths:0,practice:0,
        pTarget:0,p:0,rival:0,thrust:0,speed:80,boost:0,boostMax:0,badge:null,sputter:0,shake:0,rings:[],evDone:{},
        rv:makeRival(),lastShock:0,
+       sh:null,rocks:[],shieldFlash:0,pos:null,
        particles:[],t:0,finishT:0,cdT:0,cdStage:-1,goT:0,banner:'',bannerT:0,bannerD:1};
   }
   reset();
@@ -601,6 +641,49 @@ function initGame(){
     if(S.p>=CONFIG.events[i].at-CONFIG.boostReadyLead) fireEvent(i);
   }
 
+  /* ---- asteroid shower (distraction mode) ---- */
+  function startShower(){
+    if(S.phase==='hangar') S.phase='tutorial';
+    S.sh={t:0,dur:CONFIG.showerSec,blasted:0,gold:0,acc:0};
+    S.rocks=[];
+    say('☄️ ASTEROID SHOWER! Your shield is blasting them!',3.5);
+  }
+  function stopShower(finished){
+    if(!S.sh) return;
+    const s=S.sh; S.sh=null;
+    if(finished) say(`Shower cleared! ${s.blasted} blasted · ${s.gold} golden ⭐`,4);
+  }
+  function toggleShower(){ S.sh?stopShower(false):startShower(); }
+  function spawnRock(){
+    const k=Math.max(.5,Math.min(1,W/1000,H/560));
+    const gold=Math.random()<.12;
+    const size=(34+Math.random()*58)*(gold?1.15:1)*k;
+    const fromTop=Math.random()<.3;
+    S.rocks.push({
+      x:fromTop?W*(.3+Math.random()*.9):W+size*1.5, y:fromTop?-size*1.5:Math.random()*H,
+      vx:-(160+Math.random()*320)*(gold?.8:1), vy:fromTop?(90+Math.random()*170):(Math.random()-.4)*110,
+      rot:Math.random()*6.28, vr:(Math.random()-.5)*3, size, gold,
+      sp:gold?GOLD:ROCKS[Math.floor(Math.random()*ROCKS.length)]
+    });
+  }
+  function blast(r,mine){
+    if(S.particles.length<(PHONE?300:900)){
+      const n=PHONE?8:16;
+      for(let k=0;k<n;k++){
+        const a=Math.random()*6.28, v=120+Math.random()*320;
+        S.particles.push({k:'out',x:r.x,y:r.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1,hue:r.gold?48+Math.random()*12:20+Math.random()*30,sz:3+Math.random()*3});
+      }
+      if(r.gold) for(let k=0;k<(PHONE?6:12);k++){
+        const a=Math.random()*6.28, v=60+Math.random()*220;
+        S.particles.push({k:'out',x:r.x,y:r.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1.1,hue:55,sz:5+Math.random()*4});
+      }
+    }
+    if(mine&&S.sh){
+      S.sh.blasted++; if(r.gold) S.sh.gold++;
+      S.shieldFlash=1; S.shake=Math.max(S.shake,r.gold?.18:.07);
+    }
+  }
+
   function setMode(m){
     if(S.mode===m) return;
     S.mode=m;
@@ -627,6 +710,7 @@ function initGame(){
     if(c==='start'){ if(S.phase==='hangar'){S.phase='tutorial';S.charge=0;S.thrust=0;} }
     if(c==='race'){ if(S.phase==='tutorial'||S.phase==='hangar') startCountdown(); }
     if(c==='boost') tryBoost();
+    if(c==='distract') toggleShower();
     if(c==='pause') S.paused=!S.paused;
     if(c==='finish'&&S.phase==='racing'){ S.breaths=CONFIG.cyclesToFinish; S.pTarget=1; }
     if(c==='reset') reset();
@@ -639,7 +723,7 @@ function initGame(){
     if(keys[k]) setMode(keys[k]);
     else if(k===' '){e.preventDefault(); S.phase==='hangar'?cmd('start'):cmd('pause');}
     else if(k==='enter') cmd('race');
-    else if(k==='f') cmd('finish'); else if(k==='r') cmd('reset'); else if(k==='h') togglePanel(); else if(k==='b') tryBoost();
+    else if(k==='f') cmd('finish'); else if(k==='r') cmd('reset'); else if(k==='h') togglePanel(); else if(k==='b') tryBoost(); else if(k==='d') toggleShower();
   });
   addEventListener('keyup',e=>{ if(keys[e.key.toLowerCase()]) setMode('none'); });
   cv.addEventListener('pointerdown',e=>{
@@ -647,7 +731,7 @@ function initGame(){
     const rc=cv.getBoundingClientRect();
     if(Math.hypot(e.clientX-rc.left-b.x,e.clientY-rc.top-b.y)<b.r*1.5) tryBoost();
   });
-  ['bStart','bRace','bPause','bFinish','bReset'].forEach(id=>document.getElementById(id).onclick=()=>cmd(id.slice(1).toLowerCase()));
+  ['bStart','bRace','bPause','bFinish','bReset','bDistract'].forEach(id=>document.getElementById(id).onclick=()=>cmd(id.slice(1).toLowerCase()));
   document.getElementById('bHide').onclick=togglePanel;
   toggleBtn.onclick=togglePanel;
 
@@ -673,13 +757,15 @@ function initGame(){
       }catch(e){}
     });
   }catch(e){status.textContent='MQTT unavailable – use keyboard';}
-  let pubT=0, lastBs='idle';
+  let pubT=0, lastKey='';
   function publishState(dt){
     pubT+=dt;
     const bs=(S.badge&&S.badge.ready)?'ready':(S.boost>0&&S.boostMax>0?'active':'idle');
-    if((pubT<0.4&&bs===lastBs)||!client||!client.connected) return;
-    pubT=0; lastBs=bs;
-    client.publish(base+'state',JSON.stringify({phase:S.phase,breaths:S.breaths,practice:S.practice,total:CONFIG.cyclesToFinish,boost:bs}));
+    const sw=S.sh?Math.max(1,Math.ceil(S.sh.dur-S.sh.t)):0;
+    const key=bs+'|'+sw;
+    if((pubT<0.4&&key===lastKey)||!client||!client.connected) return;
+    pubT=0; lastKey=key;
+    client.publish(base+'state',JSON.stringify({phase:S.phase,breaths:S.breaths,practice:S.practice,total:CONFIG.cyclesToFinish,boost:bs,shower:sw}));
   }
 
   /* ---- particles ---- */
@@ -760,6 +846,27 @@ function initGame(){
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.quadraticCurveTo(qx,qy,x2,y2); ctx.stroke();
     }
     ctx.restore();
+  }
+  function drawRocks(){
+    for(const r of S.rocks){
+      ctx.save(); ctx.translate(r.x,r.y);
+      const ang=Math.atan2(r.vy,r.vx), tl=Math.min(240,Math.abs(r.vx)*.5);
+      ctx.save(); ctx.rotate(ang+Math.PI); ctx.globalCompositeOperation='lighter';
+      const g=ctx.createLinearGradient(0,0,tl,0);
+      g.addColorStop(0,r.gold?'rgba(255,220,90,.55)':'rgba(255,140,50,.45)'); g.addColorStop(1,'rgba(255,100,20,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(0,-r.size*.32); ctx.lineTo(tl,0); ctx.lineTo(0,r.size*.32); ctx.fill();
+      ctx.restore();
+      if(r.gold){
+        ctx.globalCompositeOperation='lighter';
+        const gg=ctx.createRadialGradient(0,0,r.size*.3,0,0,r.size*1.5);
+        gg.addColorStop(0,'rgba(255,220,100,.4)'); gg.addColorStop(1,'rgba(255,200,60,0)');
+        ctx.fillStyle=gg; ctx.beginPath(); ctx.arc(0,0,r.size*1.5,0,7); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
+      }
+      ctx.rotate(r.rot);
+      ctx.drawImage(r.sp,-r.size,-r.size,r.size*2,r.size*2);
+      ctx.restore();
+    }
   }
   function lights(stage,go){
     const cx=W/2, cy=H<520?H*.2:H*.27, cols=['#ff3b3b','#ffb020','#35e06b'];
@@ -908,8 +1015,29 @@ function initGame(){
   function update(dt){
     S.t+=dt; if(S.bannerT>0) S.bannerT-=dt; if(S.goT>0) S.goT-=dt;
     S.boost=Math.max(0,S.boost-dt); S.sputter=Math.max(0,S.sputter-dt); S.shake=Math.max(0,S.shake-dt);
+    S.shieldFlash=Math.max(0,S.shieldFlash-dt*4);
     if(S.boost>0 && cfg.special==='shockwave' && S.t-S.lastShock>.28){ S.lastShock=S.t; S.rings.push({r:40,life:1},{r:10,life:1}); }
     for(let i=S.rings.length-1;i>=0;i--){const r=S.rings[i]; r.r+=dt*500; r.life-=dt*1.6; if(r.life<=0)S.rings.splice(i,1);}
+
+    /* asteroid shower: spawn, move, shield-blast near the ships */
+    if(S.sh){
+      const sh=S.sh; sh.t+=dt;
+      const left=sh.dur-sh.t;
+      if(left<=0) stopShower(true);
+      else{
+        const ramp=Math.min(1,sh.t/6), taper=Math.min(1,left/5), wave=1+.5*Math.sin(sh.t*.8);
+        sh.acc+=(1+6*ramp)*taper*wave*(PHONE?.6:1)*dt;
+        while(sh.acc>=1){ sh.acc-=1; if(S.rocks.length<(PHONE?30:60)) spawnRock(); }
+      }
+    }
+    for(let i=S.rocks.length-1;i>=0;i--){
+      const r=S.rocks[i]; r.x+=r.vx*dt; r.y+=r.vy*dt; r.rot+=r.vr*dt;
+      if(r.x<-r.size*3||r.y>H+r.size*3||r.y<-r.size*4){ S.rocks.splice(i,1); continue; }
+      if(S.pos){
+        if(Math.hypot(r.x-S.pos.px,r.y-S.pos.py)<64*PSC+r.size*.7){ blast(r,true); S.rocks.splice(i,1); continue; }
+        if(S.pos.raceView && Math.hypot(r.x-S.pos.rx,r.y-S.pos.ry)<56*RSC+r.size*.7){ blast(r,false); S.rocks.splice(i,1); continue; }
+      }
+    }
 
     if(S.phase==='tutorial'){
       breathe(dt);
@@ -967,7 +1095,9 @@ function initGame(){
     }
     drawSun(sunP,S.t);
     for(const p of planets) if(p.img) ctx.drawImage(p.img,p.x*W-p.img.width/2,p.y*H-p.img.height/2);
+    drawRocks();
 
+    // lane positions: compact layout on short (landscape phone) screens
     const x0=W*.14, span=W*.66, yR=short?H*.22:H*.30;
     let yP=raceView?(short?H*.62:H*.68):(short?H*.60:H*.56), px, rx=x0+span*S.rival, py=yP;
     if(raceView){
@@ -978,6 +1108,7 @@ function initGame(){
         px=x0+span+(W*.93-(x0+span))*(1-Math.pow(1-f,2));
       }
     } else px=W*.42;
+    S.pos={px,py,rx,ry:yR,raceView};
     const mine=cfg, rv=S.rv;
     const myHue=flameHue(mine.flame,S.t), rvHue=flameHue(rv.flame,S.t);
 
@@ -1011,6 +1142,12 @@ function initGame(){
       ctx.fillStyle='rgba(255,255,255,.7)'; ctx.font=`600 ${short?13:16}px system-ui`; ctx.textAlign='center'; ctx.fillText('Rival',rx,yR-62*(RSC/1.55));
     }
     specialFx(px,py,mine);
+    if(S.shieldFlash>0){
+      const rad=64*PSC, a=Math.min(.35,S.shieldFlash*.35);
+      const g2=ctx.createRadialGradient(px,py,rad*.4,px,py,rad);
+      g2.addColorStop(0,'rgba(120,220,255,0)'); g2.addColorStop(1,`rgba(180,240,255,${a})`);
+      ctx.fillStyle=g2; ctx.beginPath(); ctx.arc(px,py,rad,0,7); ctx.fill();
+    }
     drawShip(ctx,px,py,mine,S.charge+(S.boost>0?.5:0),Math.min(1.4,S.thrust+(S.boost>0?.4:0)),PSC,S.t);
     if(mine.name){
       ctx.fillStyle='#fff'; ctx.font=`700 ${short?16:20}px system-ui`; ctx.textAlign='center';
@@ -1031,6 +1168,7 @@ function initGame(){
     if(S.phase==='racing'||S.phase==='tutorial') breathGauge();
     drawBoosterBadge();
 
+    // breath counter position: bottom-left (normal), top-right (landscape phone), top-centre (portrait)
     const cpos=portrait?{x:W/2,y:80,a:'center'}:short?{x:W-16,y:36,a:'right'}:{x:20,y:H-24,a:'left'};
     const cfont=short?'600 18px system-ui':'600 22px system-ui';
 
@@ -1063,6 +1201,11 @@ function initGame(){
     if(S.phase==='racing'||S.phase==='finishing'||S.phase==='done'){
       ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font=cfont; ctx.textAlign=cpos.a;
       ctx.fillText(`Breath ${S.breaths} / ${CONFIG.cyclesToFinish}`,cpos.x,cpos.y);
+    }
+    if(S.sh){
+      const left=Math.ceil(S.sh.dur-S.sh.t), hy=portrait?112:short?46:66;
+      text(`☄️ ${S.sh.blasted}   ⭐ ${S.sh.gold}   ${left}s`,hy,short?18:Math.max(20,Math.min(W*.025,30)),1,'#ffd9a0');
+      text('Find the GOLDEN asteroids!',hy+(short?20:30),short?13:18,.85,'#ffe36b');
     }
     if(S.bannerT>0){
       const a=Math.min(1,S.bannerT*2), el=S.bannerD-S.bannerT, pop=1+Math.max(0,.25-el)*2;
