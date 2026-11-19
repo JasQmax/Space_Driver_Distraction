@@ -165,7 +165,7 @@
     <button data-cmd="reset">Reset</button>
   </div>
 </div>
-<button id="audioGate" style="display:none;position:fixed;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));z-index:20;padding:12px 18px;border-radius:999px;border:2px solid #7dff9a;background:rgba(10,40,25,.9);color:#fff;font-size:16px;font-weight:700;cursor:pointer">🔈 Tap to enable sound</button>
+
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -740,13 +740,6 @@ function initGame(){
 
   /* ---- unlock audio on first touch / key (browsers block sound until then) ---- */
     ['touchend','click','mouseup','keydown'].forEach(ev=>addEventListener(ev,()=>{ SFX.init(); MUSIC.resume(); },{passive:true}));
-  const gate=document.getElementById('audioGate');
-  gate.onclick=()=>{ SFX.init(); MUSIC.resume(); };
-  setInterval(()=>{
-    const bad=!SFX.ready()&&!SFX.isMuted();
-    gate.style.display=bad?'block':'none';
-    if(bad) gate.textContent='🔈 Tap to enable sound ('+SFX.state()+')';
-  },600);
   
   /* ---- panel show / hide ---- */
   const panelEl=document.getElementById('panel');
