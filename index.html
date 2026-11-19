@@ -668,6 +668,7 @@ const MUSIC=(()=>{
     nextT=ac.currentTime+.1; step=0;
     timer=setInterval(tick,100);
   }
+    setInterval(()=>{ if(wanted&&!timer) begin(); },400);   // Safari: keep retrying until audio is actually running
   return {
     start(){ wanted=true; begin(); },
     stop(){ wanted=false; halt(); },
