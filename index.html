@@ -165,7 +165,7 @@
     <button data-cmd="reset">Reset</button>
   </div>
 </div>
-
+<button id="audioGate" style="display:none;position:fixed;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));z-index:20;padding:12px 18px;border-radius:999px;border:2px solid #7dff9a;background:rgba(10,40,25,.9);color:#fff;font-size:16px;font-weight:700;cursor:pointer">🔈 Tap to enable sound</button>
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -533,21 +533,44 @@ function initRemote(room){
 }
 
 /* ===================== SOUND EFFECTS (synthesised) ===================== */
+/* ===================== SOUND EFFECTS (synthesised) ===================== */
 const SFX=(()=>{
-  let ac=null,master=null,buf=null,rum=null,rumG=null,muted=false,lastPop=0,lastWh=0;
+  let ac=null,master=null,buf=null,rum=null,rumG=null,muted=false,lastPop=0,lastWh=0,silentEl=null;
   try{muted=localStorage.getItem('jdrMute')==='1';}catch(e){}
   const VOL=1;   // overall loudness 0-1 (affects effects and music)
+
+  /* iOS: playing a silent HTML audio element switches Web Audio to "playback" mode so the mute switch / ringer volume don't silence it */
+  function unlockIOS(){
+    if(silentEl) return;
+    const n=4410, b=new ArrayBuffer(44+n*2), v=new DataView(b);
+    const w=(o,s)=>{for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i));};
+    w(0,'RIFF'); v.setUint32(4,36+n*2,true); w(8,'WAVE'); w(12,'fmt ');
+    v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+    v.setUint32(24,44100,true); v.setUint32(28,88200,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+    w(36,'data'); v.setUint32(40,n*2,true);
+    silentEl=document.createElement('audio');
+    silentEl.setAttribute('playsinline',''); silentEl.loop=true;
+    silentEl.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+    silentEl.play().catch(()=>{ silentEl=null; });
+  }
   function init(){
-    if(ac){ if(ac.state==='suspended') ac.resume(); return; }
-    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
-    ac=new AC();
-    const comp=ac.createDynamicsCompressor();
-    comp.threshold.value=-14; comp.ratio.value=6; comp.knee.value=12;
-    master=ac.createGain(); master.gain.value=muted?0:VOL;
-    master.connect(comp); comp.connect(ac.destination);
-    buf=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);
-    const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
-    if(ac.state==='suspended') ac.resume();
+    try{ if(navigator.audioSession) navigator.audioSession.type='playback'; }catch(e){}
+    try{ unlockIOS(); }catch(e){}
+    if(!ac){
+      const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+      ac=new AC();
+      const comp=ac.createDynamicsCompressor();
+      comp.threshold.value=-14; comp.ratio.value=6; comp.knee.value=12;
+      master=ac.createGain(); master.gain.value=muted?0:VOL;
+      master.connect(comp); comp.connect(ac.destination);
+      buf=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);
+      const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    }
+    if(ac.state!=='running'){ try{ ac.resume(); }catch(e){} }
+    try{
+      const s=ac.createBufferSource(); s.buffer=ac.createBuffer(1,1,ac.sampleRate);
+      s.connect(ac.destination); s.start(0);
+    }catch(e){}
   }
   const ok=()=>ac&&ac.state==='running'&&!muted;
   function tone(f0,f1,dur,vol,type,delay){
@@ -569,6 +592,8 @@ const SFX=(()=>{
   return {
     init,
     ac:()=>ac, out:()=>master, ready:()=>!!ac&&ac.state==='running',
+    state:()=>ac?ac.state:'not created',
+    beep(){ if(!ac) return; tone(660,660,.25,.3,'sine'); tone(880,880,.25,.3,'sine',.28); },
     isMuted:()=>muted,
     setMuted(m){
       muted=m; try{localStorage.setItem('jdrMute',m?'1':'0');}catch(e){}
@@ -607,7 +632,6 @@ const SFX=(()=>{
     }
   };
 })();
-
 /* ===================== BACKGROUND MUSIC (synthesised loop) ===================== */
 const MUSIC=(()=>{
   const VOLM=.45, STEP=.25;   // VOLM = music loudness (0-1); STEP = 8th note at 120 BPM
@@ -715,8 +739,15 @@ function initGame(){
   if(window.visualViewport) visualViewport.addEventListener('resize',onResize);
 
   /* ---- unlock audio on first touch / key (browsers block sound until then) ---- */
-  ['pointerdown','keydown','touchend'].forEach(ev=>addEventListener(ev,()=>{ SFX.init(); MUSIC.resume(); },{passive:true}));
-
+    ['touchend','click','mouseup','keydown'].forEach(ev=>addEventListener(ev,()=>{ SFX.init(); MUSIC.resume(); },{passive:true}));
+  const gate=document.getElementById('audioGate');
+  gate.onclick=()=>{ SFX.init(); MUSIC.resume(); };
+  setInterval(()=>{
+    const bad=!SFX.ready()&&!SFX.isMuted();
+    gate.style.display=bad?'block':'none';
+    if(bad) gate.textContent='🔈 Tap to enable sound ('+SFX.state()+')';
+  },600);
+  
   /* ---- panel show / hide ---- */
   const panelEl=document.getElementById('panel');
   const toggleBtn=document.getElementById('panelToggle');
