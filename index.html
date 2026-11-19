@@ -702,6 +702,7 @@ function initGame(){
   function buildPlanets(){ if(H===lastH) return; lastH=H; spriteCache={}; planets.forEach(p=>p.img=getSprite(p)); }
   function resize(){
     W=innerWidth;H=innerHeight;
+    cv.style.width=W+'px'; cv.style.height=H+'px';
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     const k=Math.max(.42,Math.min(1,W/1000,H/560));   // scale ships by both width and height
     PSC=1.8*k; RSC=1.55*k;
@@ -711,6 +712,7 @@ function initGame(){
   addEventListener('resize',onResize);
   addEventListener('orientationchange',onResize);
   resize();
+  if(window.visualViewport) visualViewport.addEventListener('resize',onResize);
 
   /* ---- unlock audio on first touch / key (browsers block sound until then) ---- */
   ['pointerdown','keydown','touchend'].forEach(ev=>addEventListener(ev,()=>{ SFX.init(); MUSIC.resume(); },{passive:true}));
@@ -997,11 +999,24 @@ function initGame(){
   function confetti(x){
     for(let i=0;i<(PHONE?70:140);i++) S.particles.push({k:'conf',x,y:H*(.2+Math.random()*.2),vx:(Math.random()-.5)*600,vy:-Math.random()*500,life:2,hue:Math.random()*360});
   }
-  function text(t,y,size,alpha,col,x){
+   function text(t,y,size,alpha,col,x){
+    const cx=x??W/2, maxW=W*.92;
+    ctx.font=`700 ${size}px system-ui`;
+    let lines=[t];
+    if(ctx.measureText(t).width>maxW){
+      const wd=t.split(' ');
+      if(wd.length>2){ const m=Math.ceil(wd.length/2); lines=[wd.slice(0,m).join(' '),wd.slice(m).join(' ')]; }
+      const widest=Math.max(...lines.map(l=>ctx.measureText(l).width));
+      if(widest>maxW) size=Math.max(11,size*maxW/widest);
+    }
     ctx.globalAlpha=alpha; ctx.fillStyle=col||'#fff'; ctx.font=`700 ${size}px system-ui`; ctx.textAlign='center';
     ctx.shadowColor='#000'; ctx.shadowBlur=PHONE?0:8;
-    if(PHONE){ ctx.lineWidth=Math.max(2,size*.08); ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.strokeText(t,x??W/2,y); }
-    ctx.fillText(t,x??W/2,y); ctx.shadowBlur=0; ctx.globalAlpha=1;
+    lines.forEach((ln,i)=>{
+      const ly=y+i*size*1.15;
+      if(PHONE){ ctx.lineWidth=Math.max(2,size*.08); ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.strokeText(ln,cx,ly); }
+      ctx.fillText(ln,cx,ly);
+    });
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
   }
   function finishLine(x,t){
     const top=H*.1, bottom=H*.92, sq=Math.max(14,Math.min(22,H/16));
