@@ -619,6 +619,17 @@ const SFX=(()=>{
       }
       if(finished&&ok()) [523,659,784,1047].forEach((f,i)=>tone(f,f,.5,.16,'sine',i*.11));
     },
+    boost(){
+      if(!ok()) return;
+      noise(.9,.35,300,5000,.9,'bandpass');
+      tone(110,880,.7,.2,'triangle');
+      tone(60,40,.5,.3,'sine');
+      [784,988,1175,1568].forEach((f,i)=>tone(f,f,.3,.12,'sine',.25+i*.06));
+    },
+    boostReady(){
+      if(!ok()) return;
+      [880,1175].forEach((f,i)=>tone(f,f,.22,.1,'sine',i*.12));
+    },
     whoosh(){
       if(!ok()) return; const n=performance.now(); if(n-lastWh<350) return; lastWh=n;
       noise(.6,.05,2200,350,1.2,'bandpass');
@@ -828,7 +839,7 @@ function initGame(){
   function fireEvent(i){
     const e=CONFIG.events[i]; S.evDone[i]=1;
     say(e.fx==='boost'&&e.at<.5 ? SPECIALS[cfg.special].name.toUpperCase()+' ENGAGED!' : e.t,2.6);
-    if(e.fx==='boost'){ S.boost=2.6; S.boostMax=2.6; }
+    if(e.fx==='boost'){ S.boost=2.6; S.boostMax=2.6; SFX.boost(); }
     if(e.fx==='sputter') S.sputter=3.2;
     if(e.fx==='shake') S.shake=.6;
   }
@@ -1161,7 +1172,7 @@ function initGame(){
       if(S.p>=e.at-CONFIG.boostReadyLead) state='ready';
     }
     const ready=state==='ready';
-    if(ready){ if(S.readyAt==null) S.readyAt=S.t; } else S.readyAt=null;
+      if(ready){ if(S.readyAt==null){ S.readyAt=S.t; SFX.boostReady(); } } else S.readyAt=null;
     const pulse=.5+.5*Math.sin(S.t*6);
 
     /* ---- soft edge glow (slow fade, no strobing) ---- */
